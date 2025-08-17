@@ -32,42 +32,44 @@ SELinux/Firewall（後段で再掲）:
 
 ---
 
-## 2) サービスユーザとディレクトリ
+## 2) 実行ユーザは apache（新規ユーザは作成しない）
+
+アプリ配置用ディレクトリ作成と権限付与:
 
 ```
-sudo useradd --create-home --shell /bin/bash sequenceserver || true
 sudo mkdir -p /opt/sequenceserver
-sudo chown -R sequenceserver:sequenceserver /opt/sequenceserver
+sudo chown -R apache:apache /opt/sequenceserver
 ```
 
 アプリ配置（このリポジトリを配置）:
 
 ```
-sudo -u sequenceserver git clone <YOUR_GIT_REMOTE_URL> /opt/sequenceserver || true
+sudo git clone <YOUR_GIT_REMOTE_URL> /opt/sequenceserver || true
+sudo chown -R apache:apache /opt/sequenceserver
 # 既に配置済みならスキップ
 ```
 
-依存インストール（開発依存を省略）:
+依存インストール（開発依存を省略、apache の HOME を明示）:
 
 ```
-sudo -u sequenceserver bash -lc 'cd /opt/sequenceserver && bundle _2.5.17_ install --without development'
+sudo -u apache env HOME=/usr/share/httpd bash -lc 'cd /opt/sequenceserver && bundle _2.5.17_ install --without development'
 ```
 
 ---
 
 ## 3) BLAST データベース（DB）設定
 
-DB ディレクトリを作成し、権限付与:
+DB ディレクトリを作成し、権限付与（apache で読み書き可能に）:
 
 ```
 sudo mkdir -p /data2/sequenceserver/db3
-sudo chown -R sequenceserver:sequenceserver /data2/sequenceserver/db3
+sudo chown -R apache:apache /data2/sequenceserver/db3
 ```
 
-SequenceServer 設定（サービスユーザのホームに作成）:
+SequenceServer 設定（apache ユーザの HOME に作成。Rocky では通常 `/usr/share/httpd`）:
 
 ```
-sudo -u sequenceserver bash -lc 'cat > ~/.sequenceserver.conf <<EOF
+sudo -u apache env HOME=/usr/share/httpd bash -lc 'cat > ~/.sequenceserver.conf <<EOF
 :database_dir: "/data2/sequenceserver/db3"
 :num_threads: 4
 EOF'
@@ -79,7 +81,7 @@ EOF'
 
 ## 4) systemd ユニット（バックエンド Rack サーバ）
 
-ユニットファイル `/etc/systemd/system/seqserv.service` を作成:
+ユニットファイル `/etc/systemd/system/seqserv.service` を作成（apache で起動）:
 
 ```
 sudo tee /etc/systemd/system/seqserv.service >/dev/null <<'UNIT'
@@ -89,9 +91,10 @@ After=network.target
 
 [Service]
 Type=simple
-User=sequenceserver
-Group=sequenceserver
+User=apache
+Group=apache
 WorkingDirectory=/opt/sequenceserver
+Environment=HOME=/usr/share/httpd
 # bundler の絶対パスは環境で異なる場合があります。which bundle で確認して置き換えてください。
 ExecStart=/usr/bin/bundle _2.5.17_ exec rackup --host 127.0.0.1 --port 9292 config.ru
 Restart=on-failure
@@ -185,8 +188,8 @@ API:
   - `setsebool -P httpd_can_network_connect on` を適用。
 
 - 権限/パス:
-  - `/data2/sequenceserver/db3` が `sequenceserver` ユーザで読み書き可能か確認。
-  - `~sequenceserver/.sequenceserver.conf` の `:database_dir:` が `/data2/sequenceserver/db3` になっているか確認。
+  - `/data2/sequenceserver/db3` が `apache` ユーザで読み書き可能か確認。
+  - `~apache/.sequenceserver.conf`（= `/usr/share/httpd/.sequenceserver.conf`）の `:database_dir:` が `/data2/sequenceserver/db3` になっているか確認。
 
 - bundler のパスが異なる:
   - `which bundle` でパスを確認し、systemd の ExecStart を調整。
