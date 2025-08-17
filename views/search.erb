@@ -4,6 +4,104 @@
 <!-- We will initialise React on this div -->
 <div id="view" class="my-6 container mx-auto max-w-screen-xl py-6"></div>
 
+<!-- Simple FASTA upload form to add a new BLAST database -->
+<div class="container mx-auto max-w-screen-xl px-4">
+  <div class="rounded border p-4 bg-white">
+    <h2 class="text-lg font-semibold mb-2">Add BLAST Database</h2>
+    <form action="/upload" method="POST" enctype="multipart/form-data" class="flex flex-col gap-2">
+      <input type="hidden" name="_csrf" value="<%= Rack::Csrf.token(env) %>">
+      <label class="block">
+        <span class="text-sm">FASTA file</span>
+        <input type="file" name="file" accept=".fa,.fasta,.fna,.faa,.fas,.fa.gz,.fasta.gz" class="block w-full border rounded p-2" required>
+      </label>
+      <label class="block">
+        <span class="text-sm">Title (optional)</span>
+        <input type="text" name="title" placeholder="Auto-detected from filename" class="block w-full border rounded p-2">
+      </label>
+      <label class="block">
+        <span class="text-sm">Type (optional)</span>
+        <select name="dbtype" class="block w-full border rounded p-2">
+          <option value="">Auto-detect</option>
+          <option value="nucleotide">Nucleotide</option>
+          <option value="protein">Protein</option>
+        </select>
+      </label>
+      <div class="pt-2">
+        <button type="submit" class="px-4 py-2 bg-seqblue text-white rounded hover:bg-seqorange">Upload and index</button>
+      </div>
+      <p class="text-xs text-gray-600">File will be saved to <code><%= SequenceServer.config[:database_dir] %></code> and indexed with makeblastdb.</p>
+    </form>
+  </div>
+  <div class="py-2"></div>
+  <!-- Manage existing databases: rename/delete -->
+  <div class="rounded border p-4 bg-white relative z-20" style="z-index:20;">
+    <div class="flex items-center justify-between mb-2">
+      <h2 class="text-lg font-semibold">Manage Databases</h2>
+      <form id="db-delete" action="/databases/delete" method="POST" onsubmit="return confirm('Delete selected database files? This cannot be undone.');" class="ml-2">
+        <input type="hidden" name="_csrf" value="<%= Rack::Csrf.token(env) %>">
+        <input type="hidden" name="id" id="db-delete-id" />
+        <button type="submit" class="px-4 py-2 border border-red-600 text-red-600 rounded hover:bg-red-50">Delete</button>
+      </form>
+    </div>
+    <div class="grid md:grid-cols-2 gap-4">
+      <div>
+        <label class="block">
+          <span class="text-sm">Select Database</span>
+          <select id="db-select" class="block w-full border rounded p-2"></select>
+        </label>
+        <p class="text-xs text-gray-600 mt-1">List is loaded from current server databases.</p>
+      </div>
+      <div>
+        <div class="flex flex-col gap-2">
+          <form id="db-rename" action="/databases/rename" method="POST" class="flex flex-col gap-2">
+            <input type="hidden" name="_csrf" value="<%= Rack::Csrf.token(env) %>">
+            <input type="hidden" name="id" id="db-rename-id" />
+            <label class="block">
+              <span class="text-sm">New Title</span>
+              <input type="text" name="new_title" class="block w-full border rounded p-2" placeholder="Leave blank to keep" />
+            </label>
+            <label class="block">
+              <span class="text-sm">New Base Filename (optional)</span>
+              <input type="text" name="new_basename" class="block w-full border rounded p-2" placeholder="e.g. my_database" />
+            </label>
+          </form>
+          <div class="pt-2 flex items-center gap-2">
+            <button type="submit" form="db-rename" class="px-4 py-2 bg-seqblue text-white rounded hover:bg-seqorange">Rename</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  // Populate database select and sync hidden ids
+  (function() {
+    fetch('/searchdata.json').then(r => r.json()).then(data => {
+      const select = document.getElementById('db-select');
+      const renameId = document.getElementById('db-rename-id');
+      const deleteId = document.getElementById('db-delete-id');
+      const dbs = data.database || [];
+      select.innerHTML = '';
+      dbs.forEach(db => {
+        const opt = document.createElement('option');
+        const parts = db.name.split('/');
+        const base = parts[parts.length - 1];
+        opt.value = db.id;
+        opt.textContent = `${db.title} — ${base}`;
+        select.appendChild(opt);
+      });
+      const syncIds = () => {
+        const val = select.value;
+        renameId.value = val;
+        deleteId.value = val;
+      };
+      select.addEventListener('change', syncIds);
+      syncIds();
+    });
+  })();
+</script>
+
 <!-- JS -->
 <script src="sequenceserver-search.min.js?ver=<%= SequenceServer::VERSION %>"></script>
 

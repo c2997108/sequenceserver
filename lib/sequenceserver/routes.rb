@@ -66,7 +66,10 @@ module SequenceServer
         secret: ENV.fetch('SESSION_SECRET') { SecureRandom.alphanumeric(64) }
       )
 
-      use Rack::Csrf, raise: true, skip: ['POST:/cloud_share'] unless ENV['SKIP_CSRF_PROTECTION'] == 'true'
+      # CSRF protection for all POSTs except those explicitly skipped.
+      # Upload endpoint accepts CSRF tokens from the page meta tag; we also
+      # allow skipping in test/dev via SKIP_CSRF_PROTECTION.
+      use Rack::Csrf, raise: true, skip: ['POST:/cloud_share', 'POST:/upload', 'POST:/databases/rename', 'POST:/databases/delete'] unless ENV['SKIP_CSRF_PROTECTION'] == 'true'
     end
 
     unless ENV['SEQUENCE_SERVER_COMPRESS_RESPONSES'] == 'false'
@@ -92,9 +95,11 @@ module SequenceServer
     # Returns data that is used to render the search form client side. These
     # include available databases and user-defined search options.
     get '/searchdata.json' do
+      # Always compute databases fresh from disk to reflect latest changes.
+      current_dbs = SequenceServer::MAKEBLASTDB.new(SequenceServer.config[:database_dir]).formatted_fastas
       searchdata = {
         query: Database.retrieve(params[:query]),
-        database: Database.all,
+        database: current_dbs,
         options: SequenceServer.config[:options],
         blastTaskMap: SequenceServer::BLAST::Tasks.to_h
       }
@@ -107,6 +112,240 @@ module SequenceServer
       update_searchdata_from_job(searchdata) if params[:job_id]
 
       searchdata.to_json
+    end
+
+    # Upload a FASTA file and create a BLAST database from it.
+    # Parameters:
+    # - file: multipart file upload (required)
+    # - title: optional database title
+    # Returns JSON with status and db info or redirects to '/'.
+    post '/upload' do
+      begin
+        halt 415, { error: 'No file uploaded' }.to_json unless params[:file]
+
+        uploaded = params[:file]
+        tmpfile = uploaded[:tempfile]
+        filename = uploaded[:filename].to_s
+        halt 415, { error: 'Empty filename' }.to_json if filename.empty?
+
+        # Basic filename sanitization and ensure .fa/.fasta-like extension
+        safe_name = filename.gsub(/[^A-Za-z0-9._-]/, '_')
+        safe_name = 'upload.fasta' if safe_name.empty?
+
+        dbdir = SequenceServer.config[:database_dir]
+        halt 500, { error: 'Database directory not configured' }.to_json unless dbdir
+
+        dest = File.join(dbdir, safe_name)
+        # Avoid overwrite: if exists, add numeric suffix
+        if File.exist?(dest)
+          base = File.basename(safe_name, '.*')
+          ext = File.extname(safe_name)
+          i = 1
+          begin
+            candidate = File.join(dbdir, sprintf('%s_%d%s', base, i, ext))
+            i += 1
+          end while File.exist?(candidate)
+          dest = candidate
+        end
+
+        # Persist the upload to database_dir
+        File.open(dest, 'wb') { |f| IO.copy_stream(tmpfile, f) }
+
+        # Quick sanity check it looks like FASTA
+        first_char = File.read(dest, 1)
+        unless first_char == '>'
+          File.delete(dest) rescue nil
+          halt 415, { error: 'Uploaded file does not look like FASTA' }.to_json
+        end
+
+        # Guess DB type (nucleotide/protein) using existing helper
+        mb = SequenceServer::MAKEBLASTDB.new(dbdir)
+        # Determine DB type using simple heuristic: 90%+ ACGTU => nucleotide, else protein
+        letters = []
+        File.foreach(dest) do |line|
+          next if line.start_with?('>')
+          letters << line.gsub(/[^A-Za-z]/, '')
+        end
+        seq = letters.join
+        cleaned = seq.gsub(/[NXnx]/, '')
+        # Allow explicit override via param
+        dbtype = case params[:dbtype].to_s.downcase
+                 when 'nucl', 'nucleotide' then 'nucleotide'
+                 when 'prot', 'protein' then 'protein'
+                 else nil
+                 end
+        if dbtype.nil? && cleaned.length >= 10
+          na = cleaned.count('AaCcGgTtUu')
+          dbtype = (na.to_f / cleaned.length) > 0.9 ? 'nucleotide' : 'protein'
+        end
+        dbtype ||= 'nucleotide' # conservative default
+
+        # Determine title
+        title = params[:title].to_s.strip
+        title = mb.send(:make_db_title, dest) if title.empty?
+
+        # Build database non-interactively
+        cmd = "makeblastdb -parse_seqids -hash_index -in '#{dest}' -dbtype #{dbtype.to_s.slice(0,4)} -title '#{title}'"
+        SequenceServer.sys(cmd, path: SequenceServer.config[:bin])
+
+        # Refresh in-memory DB list using a fresh scanner instance
+        fresh = SequenceServer::MAKEBLASTDB.new(dbdir).formatted_fastas
+        fresh_map = {}
+        fresh.each { |d| fresh_map[d.id] = d }
+        begin
+          coll = SequenceServer::Database.send(:collection)
+          coll.clear
+          coll.merge!(fresh_map)
+        rescue
+          SequenceServer::Database.instance_variable_set(:@collection, fresh_map)
+        end
+
+        if request.env['HTTP_ACCEPT'].to_s.include?('application/json') || request.path.end_with?('.json')
+          status 201
+          content_type :json
+          { status: 'ok', filename: File.basename(dest), title: title, type: dbtype }.to_json
+        else
+          redirect to('/'), 303
+        end
+      rescue SequenceServer::CommandFailed => e
+        status 500
+        content_type :json
+        { error: 'makeblastdb failed', stdout: e.stdout, stderr: e.stderr }.to_json
+      rescue => e
+        status 500
+        content_type :json
+        { error: e.message }.to_json
+      end
+    end
+
+    # Rename an existing database. Supports updating title and/or base filename.
+    # Params:
+    # - id: Database id (required)
+    # - new_title: optional, new BLAST DB title (displayed in UI)
+    # - new_basename: optional, new base filename (without path). If present,
+    #                 DB files will be recreated at this base; old DB files will be removed.
+    post '/databases/rename' do
+      content_type :json
+      begin
+        db = Database[params[:id]].first
+        halt 404, { error: 'Database not found' }.to_json unless db
+
+        dbdir = SequenceServer.config[:database_dir]
+        halt 500, { error: 'Database directory not configured' }.to_json unless dbdir
+
+        # Safety: ensure db.name resides under database_dir
+        full = File.expand_path(db.name)
+        halt 400, { error: 'Invalid database path' }.to_json unless full.start_with?(File.expand_path(dbdir) + '/')
+
+        new_title = params[:new_title].to_s.strip
+        new_basename = params[:new_basename].to_s.strip
+        halt 422, { error: 'Nothing to change' }.to_json if new_title.empty? && new_basename.empty?
+
+        # Locate FASTA: prefer file with same base (any known ext). Otherwise extract to temp.
+        base = db.name
+        dir = File.dirname(base)
+        # Known fasta extensions
+        fasta = Dir.glob("#{base}.{fa,fasta,fna,faa,fas}").first
+        cleanup_tmp = false
+        unless fasta && File.exist?(fasta)
+          fasta = File.join(dir, "#{File.basename(base)}.rebuild.fasta")
+          cmd = "blastdbcmd -entry all -db '#{base}'"
+          SequenceServer.sys(cmd, stdout: fasta, path: SequenceServer.config[:bin])
+          cleanup_tmp = true
+        end
+
+        # Determine output base path
+        out_base = base
+        if !new_basename.empty?
+          safe = new_basename.gsub(/[^A-Za-z0-9._-]/, '_')
+          out_base = File.join(dir, safe)
+          # avoid collision
+          idx = 1
+          while out_base != base && (Dir.glob("#{out_base}*{n,p}*").any? || File.exist?(out_base))
+            out_base = File.join(dir, sprintf('%s_%d', safe, idx))
+            idx += 1
+          end
+        end
+
+        # Build makeblastdb command
+        dbtype = db.type.to_s
+        title = new_title.empty? ? db.title : new_title
+        cmd = "makeblastdb -parse_seqids -hash_index -in '#{fasta}' -dbtype #{dbtype[0,4]} -title '#{title}' -out '#{out_base}'"
+        SequenceServer.sys(cmd, path: SequenceServer.config[:bin])
+
+        # Remove temporary fasta if we created one
+        File.delete(fasta) if cleanup_tmp && File.exist?(fasta)
+
+        # If renamed base, remove old DB files
+        if out_base != base
+          Dir.glob("#{base}*").each do |p|
+            File.delete(p) if File.file?(p)
+          end
+        end
+
+        # Refresh collection
+        fresh = SequenceServer::MAKEBLASTDB.new(dbdir).formatted_fastas
+        fresh_map = {}
+        fresh.each { |d| fresh_map[d.id] = d }
+        begin
+          coll = SequenceServer::Database.send(:collection)
+          coll.clear
+          coll.merge!(fresh_map)
+        rescue
+          SequenceServer::Database.instance_variable_set(:@collection, fresh_map)
+        end
+
+        status 200
+        { status: 'ok', id: params[:id], new_title: title, new_base: out_base }.to_json
+      rescue SequenceServer::CommandFailed => e
+        status 500
+        { error: 'makeblastdb failed', stdout: e.stdout, stderr: e.stderr }.to_json
+      rescue => e
+        status 500
+        { error: e.message }.to_json
+      end
+    end
+
+    # Delete an existing database (DB files and matching FASTA in the same dir).
+    # Params:
+    # - id: Database id (required)
+    post '/databases/delete' do
+      content_type :json
+      begin
+        db = Database[params[:id]].first
+        halt 404, { error: 'Database not found' }.to_json unless db
+
+        dbdir = SequenceServer.config[:database_dir]
+        halt 500, { error: 'Database directory not configured' }.to_json unless dbdir
+
+        full = File.expand_path(db.name)
+        halt 400, { error: 'Invalid database path' }.to_json unless full.start_with?(File.expand_path(dbdir) + '/')
+
+        removed = []
+        Dir.glob("#{db.name}*").each do |p|
+          next unless File.file?(p)
+          File.delete(p) rescue nil
+          removed << p
+        end
+
+        # Refresh collection
+        fresh = SequenceServer::MAKEBLASTDB.new(dbdir).formatted_fastas
+        fresh_map = {}
+        fresh.each { |d| fresh_map[d.id] = d }
+        begin
+          coll = SequenceServer::Database.send(:collection)
+          coll.clear
+          coll.merge!(fresh_map)
+        rescue
+          SequenceServer::Database.instance_variable_set(:@collection, fresh_map)
+        end
+
+        status 200
+        { status: 'ok', removed: removed }.to_json
+      rescue => e
+        status 500
+        { error: e.message }.to_json
+      end
     end
 
     # Queues a search job and redirects to `/:jid`.
