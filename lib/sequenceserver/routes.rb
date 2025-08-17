@@ -205,7 +205,8 @@ module SequenceServer
           content_type :json
           { status: 'ok', filename: File.basename(dest), title: title, type: dbtype }.to_json
         else
-          redirect to(File.join(root_path_prefix, '/')), 303
+          # Use app-relative path; Sinatra will prefix script_name when mounted.
+          redirect to('/'), 303
         end
       rescue SequenceServer::CommandFailed => e
         status 500
@@ -355,7 +356,8 @@ module SequenceServer
         erb :search, layout: settings.layout
       else
         job = Job.create(params)
-        redirect to(File.join(root_path_prefix, "/#{job.id}"))
+        # App-relative redirect; script_name is applied automatically.
+        redirect to("/#{job.id}")
       end
     end
 
