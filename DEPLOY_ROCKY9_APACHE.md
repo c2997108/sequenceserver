@@ -68,15 +68,15 @@ sudo -u apache env HOME=/usr/share/httpd bash -lc '
 アプリ配置用ディレクトリ作成と権限付与:
 
 ```
-sudo mkdir -p /opt/sequenceserver
-sudo chown -R apache:apache /opt/sequenceserver
+sudo mkdir -p /data2/sequenceserver/sequenceserver-3kai
+sudo chown -R apache:apache /data2/sequenceserver/sequenceserver-3kai
 ```
 
 アプリ配置（このリポジトリを配置）:
 
 ```
-sudo git clone <YOUR_GIT_REMOTE_URL> /opt/sequenceserver || true
-sudo chown -R apache:apache /opt/sequenceserver
+sudo git clone <YOUR_GIT_REMOTE_URL> /data2/sequenceserver/sequenceserver-3kai || true
+sudo chown -R apache:apache /data2/sequenceserver/sequenceserver-3kai
 # 既に配置済みならスキップ
 ```
 
@@ -84,7 +84,7 @@ sudo chown -R apache:apache /opt/sequenceserver
 
 ```
 sudo -u apache env HOME=/usr/share/httpd PATH=/usr/share/httpd/.rbenv/shims:/usr/share/httpd/.rbenv/bin:$PATH bash -lc '
-  cd /opt/sequenceserver
+  cd /data2/sequenceserver/sequenceserver-3kai
   bundle _2.5.17_ install --without development
 '
 ```
@@ -127,7 +127,7 @@ After=network.target
 Type=simple
 User=apache
 Group=apache
-WorkingDirectory=/opt/sequenceserver
+WorkingDirectory=/data2/sequenceserver/sequenceserver-3kai
 Environment=HOME=/usr/share/httpd
 Environment=RBENV_ROOT=/usr/share/httpd/.rbenv
 Environment=PATH=/usr/share/httpd/.rbenv/shims:/usr/share/httpd/.rbenv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin
