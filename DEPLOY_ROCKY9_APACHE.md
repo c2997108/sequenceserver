@@ -30,6 +30,37 @@ SELinux/Firewall（後段で再掲）:
 - SELinux: `httpd_can_network_connect` を有効化
 - Firewall: 80/443 を開放
 
+### 1-2) Ruby 3.0.6 以上が必要な場合（rbenv の導入）
+
+Rocky 9 の標準 Ruby が 3.0.4 の場合、以下のようなエラーになります:
+
+Because every version of sequenceserver depends on Ruby >= 3.0.6 ... current Ruby version is = 3.0.4
+
+この場合は apache ユーザのホーム配下に rbenv で新しい Ruby を導入してください。
+
+```
+sudo dnf install -y git gcc make bzip2 openssl-devel readline-devel zlib-devel libffi-devel
+
+# apache ユーザの HOME を指定して rbenv/ruby-build を導入
+sudo -u apache env HOME=/usr/share/httpd bash -lc '
+  set -e
+  RBENV_ROOT="$HOME/.rbenv"
+  if [ ! -d "$RBENV_ROOT" ]; then
+    git clone https://github.com/rbenv/rbenv.git "$RBENV_ROOT"
+    mkdir -p "$RBENV_ROOT/plugins"
+    git clone https://github.com/rbenv/ruby-build.git "$RBENV_ROOT/plugins/ruby-build"
+  fi
+  export PATH="$RBENV_ROOT/bin:$PATH"
+  RUBY_VER=3.2.5
+  rbenv install -s "$RUBY_VER"
+  rbenv global "$RUBY_VER"
+  gem install bundler -v 2.5.17 --no-document
+  rbenv rehash
+'
+```
+
+以降の bundle 実行は rbenv の shims を利用するため、`PATH` に `/usr/share/httpd/.rbenv/shims:/usr/share/httpd/.rbenv/bin` を含めます。
+
 ---
 
 ## 2) 実行ユーザは apache（新規ユーザは作成しない）
@@ -52,7 +83,10 @@ sudo chown -R apache:apache /opt/sequenceserver
 依存インストール（開発依存を省略、apache の HOME を明示）:
 
 ```
-sudo -u apache env HOME=/usr/share/httpd bash -lc 'cd /opt/sequenceserver && bundle _2.5.17_ install --without development'
+sudo -u apache env HOME=/usr/share/httpd PATH=/usr/share/httpd/.rbenv/shims:/usr/share/httpd/.rbenv/bin:$PATH bash -lc '
+  cd /opt/sequenceserver
+  bundle _2.5.17_ install --without development
+'
 ```
 
 ---
@@ -81,7 +115,7 @@ EOF'
 
 ## 4) systemd ユニット（バックエンド Rack サーバ）
 
-ユニットファイル `/etc/systemd/system/seqserv.service` を作成（apache で起動）:
+ユニットファイル `/etc/systemd/system/seqserv.service` を作成（apache で起動、rbenv を利用）:
 
 ```
 sudo tee /etc/systemd/system/seqserv.service >/dev/null <<'UNIT'
@@ -95,8 +129,10 @@ User=apache
 Group=apache
 WorkingDirectory=/opt/sequenceserver
 Environment=HOME=/usr/share/httpd
-# bundler の絶対パスは環境で異なる場合があります。which bundle で確認して置き換えてください。
-ExecStart=/usr/bin/bundle _2.5.17_ exec rackup --host 127.0.0.1 --port 9292 config.ru
+Environment=RBENV_ROOT=/usr/share/httpd/.rbenv
+Environment=PATH=/usr/share/httpd/.rbenv/shims:/usr/share/httpd/.rbenv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin
+# rbenv の bundle シムを使用
+ExecStart=/usr/share/httpd/.rbenv/shims/bundle _2.5.17_ exec rackup --host 127.0.0.1 --port 9292 config.ru
 Restart=on-failure
 RestartSec=5
 
