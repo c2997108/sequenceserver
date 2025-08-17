@@ -74,10 +74,10 @@
   </div>
 </div>
 
-<script>
-  // Populate database select and sync hidden ids
-  (function() {
-    fetch('<%= root_path_prefix %>/searchdata.json').then(r => r.json()).then(data => {
+  <script>
+    // Populate database select and sync hidden ids
+    (function() {
+      fetch('<%= root_path_prefix %>/searchdata.json').then(r => r.json()).then(data => {
       const select = document.getElementById('db-select');
       const renameId = document.getElementById('db-rename-id');
       const deleteId = document.getElementById('db-delete-id');
@@ -100,7 +100,28 @@
       syncIds();
     });
   })();
-</script>
+
+  // Submit rename/delete via fetch and reload the page instead of navigating
+  (function() {
+    function ajaxifyForm(formId) {
+      const form = document.getElementById(formId);
+      if (!form) return;
+      form.addEventListener('submit', function(e) {
+        e.preventDefault();
+        const fd = new FormData(form);
+        fetch(form.action, { method: 'POST', body: fd })
+          .then(res => {
+            if (!res.ok) throw new Error('Request failed');
+            return res.json().catch(() => ({}));
+          })
+          .then(() => { window.location.reload(); })
+          .catch(() => { window.location.reload(); });
+      });
+    }
+    ajaxifyForm('db-rename');
+    ajaxifyForm('db-delete');
+  })();
+  </script>
 
 <!-- JS -->
 <script src="<%= root_path_prefix %>/sequenceserver-search.min.js?ver=<%= SequenceServer::VERSION %>"></script>
