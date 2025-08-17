@@ -8,7 +8,7 @@
 <div class="container mx-auto max-w-screen-xl px-4">
   <div class="rounded border p-4 bg-white">
     <h2 class="text-lg font-semibold mb-2">Add BLAST Database</h2>
-    <form action="/upload" method="POST" enctype="multipart/form-data" class="flex flex-col gap-2">
+    <form action="<%= root_path_prefix %>/upload" method="POST" enctype="multipart/form-data" class="flex flex-col gap-2">
       <input type="hidden" name="_csrf" value="<%= Rack::Csrf.token(env) %>">
       <label class="block">
         <span class="text-sm">FASTA file</span>
@@ -37,7 +37,7 @@
   <div class="rounded border p-4 bg-white relative z-20" style="z-index:20;">
     <div class="flex items-center justify-between mb-2">
       <h2 class="text-lg font-semibold">Manage Databases</h2>
-      <form id="db-delete" action="/databases/delete" method="POST" onsubmit="return confirm('Delete selected database files? This cannot be undone.');" class="ml-2">
+      <form id="db-delete" action="<%= root_path_prefix %>/databases/delete" method="POST" onsubmit="return confirm('Delete selected database files? This cannot be undone.');" class="ml-2">
         <input type="hidden" name="_csrf" value="<%= Rack::Csrf.token(env) %>">
         <input type="hidden" name="id" id="db-delete-id" />
         <button type="submit" class="px-4 py-2 border border-red-600 text-red-600 rounded hover:bg-red-50">Delete</button>
@@ -53,7 +53,7 @@
       </div>
       <div>
         <div class="flex flex-col gap-2">
-          <form id="db-rename" action="/databases/rename" method="POST" class="flex flex-col gap-2">
+          <form id="db-rename" action="<%= root_path_prefix %>/databases/rename" method="POST" class="flex flex-col gap-2">
             <input type="hidden" name="_csrf" value="<%= Rack::Csrf.token(env) %>">
             <input type="hidden" name="id" id="db-rename-id" />
             <label class="block">
@@ -77,7 +77,7 @@
 <script>
   // Populate database select and sync hidden ids
   (function() {
-    fetch('/searchdata.json').then(r => r.json()).then(data => {
+    fetch('<%= root_path_prefix %>/searchdata.json').then(r => r.json()).then(data => {
       const select = document.getElementById('db-select');
       const renameId = document.getElementById('db-rename-id');
       const deleteId = document.getElementById('db-delete-id');
@@ -103,7 +103,7 @@
 </script>
 
 <!-- JS -->
-<script src="sequenceserver-search.min.js?ver=<%= SequenceServer::VERSION %>"></script>
+<script src="<%= root_path_prefix %>/sequenceserver-search.min.js?ver=<%= SequenceServer::VERSION %>"></script>
 
 <!-- Markup for advanced options modal -->
 <div class="relative">

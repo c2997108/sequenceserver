@@ -205,7 +205,7 @@ module SequenceServer
           content_type :json
           { status: 'ok', filename: File.basename(dest), title: title, type: dbtype }.to_json
         else
-          redirect to('/'), 303
+          redirect to(File.join(root_path_prefix, '/')), 303
         end
       rescue SequenceServer::CommandFailed => e
         status 500
@@ -355,7 +355,7 @@ module SequenceServer
         erb :search, layout: settings.layout
       else
         job = Job.create(params)
-        redirect to("/#{job.id}")
+        redirect to(File.join(root_path_prefix, "/#{job.id}"))
       end
     end
 
@@ -585,10 +585,10 @@ module SequenceServer
       {
         user_warning: 'LARGE_RESULT',
         download_links: [
-          { name: 'Standard Tabular Report', url: "download/#{jid}.std_tsv" },
-          { name: 'Full Tabular Report', url: "/download/#{jid}.full_tsv" },
-          { name: 'Results in XML', url: "/download/#{jid}.xml" },
-          { name: 'Pairwise', url: "/download/#{jid}.pairwise" },
+          { name: 'Standard Tabular Report', url: "#{root_path_prefix}/download/#{jid}.std_tsv" },
+          { name: 'Full Tabular Report', url: "#{root_path_prefix}/download/#{jid}.full_tsv" },
+          { name: 'Results in XML', url: "#{root_path_prefix}/download/#{jid}.xml" },
+          { name: 'Pairwise', url: "#{root_path_prefix}/download/#{jid}.pairwise" },
         ]
       }
     end
