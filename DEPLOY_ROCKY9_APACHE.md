@@ -22,7 +22,7 @@ Ruby/Bundler（例: システムRubyを使用。環境に応じて rbenv 等で�
 
 ```
 sudo dnf groupinstall -y "Development Tools"
-sudo dnf install -y git curl openssl-devel readline-devel zlib-devel libffi-devel ruby ruby-devel rubygems
+sudo dnf install -y git curl openssl-devel readline-devel zlib-devel libffi-devel libyaml-devel ruby ruby-devel rubygems
 sudo gem install bundler -v 2.5.17
 ```
 
@@ -39,7 +39,7 @@ Because every version of sequenceserver depends on Ruby >= 3.0.6 ... current Rub
 この場合は apache ユーザのホーム配下に rbenv で新しい Ruby を導入してください。
 
 ```
-sudo dnf install -y git gcc make bzip2 openssl-devel readline-devel zlib-devel libffi-devel
+sudo dnf install -y git gcc make bzip2 openssl-devel readline-devel zlib-devel libffi-devel libyaml-devel
 
 # apache ユーザの HOME を指定して rbenv/ruby-build を導入
 sudo -u apache env HOME=/usr/share/httpd bash -lc '
