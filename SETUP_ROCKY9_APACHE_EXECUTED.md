@@ -166,6 +166,8 @@ ProxyRequests Off
   Require all granted
 </Location>
 
+RequestHeader set X-Forwarded-Proto "https"
+RequestHeader set X-Forwarded-Port  "443"
 ProxyPass        /seqserv http://127.0.0.1:9292/seqserv retry=0 timeout=60
 ProxyPassReverse /seqserv http://127.0.0.1:9292/seqserv
 ```
