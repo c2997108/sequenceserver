@@ -90,8 +90,8 @@ sudo chown -R apache:apache /data2/sequenceserver/db3
 # ~/.sequenceserver.conf をapacheのHOMEに作成
 sudo bash -lc 'cat > /usr/share/httpd/.sequenceserver.conf <<EOF
 :database_dir: "/data2/sequenceserver/db3"
-:num_threads: 2
-:bin: "/usr/local/bin"
+:num_threads: 14
+:bin: "/suikou/tool9/ncbi-blast-2.16.0+/bin"
 EOF'
 sudo chown apache:apache /usr/share/httpd/.sequenceserver.conf
 ```
@@ -132,7 +132,7 @@ Group=apache
 WorkingDirectory=/data2/sequenceserver/sequenceserver-3kai
 Environment=HOME=/usr/share/httpd
 Environment=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin
-ExecStart=/usr/bin/bundle _2.5.17_ exec rackup --host 127.0.0.1 --port 9292 config.ru
+ExecStart=/usr/bin/bundle _2.5.17_ exec rackup --host 0.0.0.0 --port 9292 config.ru
 Restart=on-failure
 RestartSec=5
 
