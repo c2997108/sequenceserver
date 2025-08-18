@@ -6,6 +6,7 @@
 - バックエンド: Rack (rackup) で `127.0.0.1:9292` を待受
 - アプリ側: `config.ru` で `map '/seqserv'` 済み（本リポジトリはサブパス対応済み）
 - BLAST DB ディレクトリ: `/data2/sequenceserver/db3`
+- 必要なBLAST+バージョン: `2.16.0+` 以上
 
 ---
 
@@ -29,6 +30,12 @@ sudo gem install bundler -v 2.5.17
 SELinux/Firewall（後段で再掲）:
 - SELinux: `httpd_can_network_connect` を有効化
 - Firewall: 80/443 を開放
+
+注意（BLAST+の入手）:
+- Rocky9の標準/EPELに`ncbi-blast+`が無い場合があります。その際はNCBI公式のバイナリを導入してください。
+  - 例: `/opt/ncbi-blast-2.16.0+` に展開し、`/usr/local/bin` にシンボリックリンクを作成
+  - `blastdbcmd -version` が `2.16.0+` を返すことを確認
+  - `~apache/.sequenceserver.conf` に `:bin: "/usr/local/bin"` を追記（後述）
 
 ### 1-2) Ruby 3.0.6 以上が必要な場合（rbenv の導入）
 
@@ -75,7 +82,7 @@ sudo chown -R apache:apache /data2/sequenceserver/sequenceserver-3kai
 アプリ配置（このリポジトリを配置）:
 
 ```
-sudo git clone <YOUR_GIT_REMOTE_URL> /data2/sequenceserver/sequenceserver-3kai || true
+sudo git clone https://github.com/c2997108/sequenceserver.git /data2/sequenceserver/sequenceserver-3kai || true
 sudo chown -R apache:apache /data2/sequenceserver/sequenceserver-3kai
 # 既に配置済みならスキップ
 ```
@@ -85,7 +92,10 @@ sudo chown -R apache:apache /data2/sequenceserver/sequenceserver-3kai
 ```
 sudo -u apache env HOME=/usr/share/httpd PATH=/usr/share/httpd/.rbenv/shims:/usr/share/httpd/.rbenv/bin:$PATH bash -lc '
   cd /data2/sequenceserver/sequenceserver-3kai
-  bundle _2.5.17_ install --without development
+  # Bundler の設定（非推奨フラグ --without/--path の代替）
+  bundle _2.5.17_ config set --local without "development"
+  bundle _2.5.17_ config set --local path "vendor/bundle"
+  bundle _2.5.17_ install
 '
 ```
 
@@ -106,10 +116,31 @@ SequenceServer 設定（apache ユーザの HOME に作成。Rocky では通常 
 sudo -u apache env HOME=/usr/share/httpd bash -lc 'cat > ~/.sequenceserver.conf <<EOF
 :database_dir: "/data2/sequenceserver/db3"
 :num_threads: 4
+# NCBI公式バイナリを /usr/local/bin に配置した場合は追加
+# :bin: "/usr/local/bin"
 EOF'
 ```
 
-（初期DBがない場合は、画面の「Add BLAST Database」からFASTAをアップロードすると自動で `makeblastdb` が実行されます。）
+重要: 初回起動には「1つ以上のBLAST+データベース」が必須です。
+- データベースが1つもない状態では、バックエンドは起動に失敗します（UIにアクセスできません）。
+- そのため、以下のいずれかで最初のDBを用意してください。
+  - 既存のBLAST+ DB一式（`.nin/.nsq` など）を `/data2/sequenceserver/db3` に配置
+  - あるいはFASTAから `makeblastdb` を実行して作成（例）:
+
+```
+sudo -u apache env PATH=/usr/local/bin:/usr/bin bash -lc '
+  cd /data2/sequenceserver/db3
+  cat > sample.fna <<FA
+>seq1
+ACGTACGTACGT
+>seq2
+ACGTACGTACGA
+FA
+  makeblastdb -in sample.fna -dbtype nucl -parse_seqids -hash_index -title sample
+'
+```
+
+初期DBを1つ以上用意した後にバックエンドを起動してください。起動後はUIの「Add BLAST Database」でFASTAアップロード→`makeblastdb`実行が可能になります。
 
 ---
 
@@ -129,10 +160,14 @@ User=apache
 Group=apache
 WorkingDirectory=/data2/sequenceserver/sequenceserver-3kai
 Environment=HOME=/usr/share/httpd
-Environment=RBENV_ROOT=/usr/share/httpd/.rbenv
-Environment=PATH=/usr/share/httpd/.rbenv/shims:/usr/share/httpd/.rbenv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin
-# rbenv の bundle シムを使用
-ExecStart=/usr/share/httpd/.rbenv/shims/bundle _2.5.17_ exec rackup --host 127.0.0.1 --port 9292 config.ru
+; rbenv を使う場合
+;Environment=RBENV_ROOT=/usr/share/httpd/.rbenv
+;Environment=PATH=/usr/share/httpd/.rbenv/shims:/usr/share/httpd/.rbenv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin
+;ExecStart=/usr/share/httpd/.rbenv/shims/bundle _2.5.17_ exec rackup --host 127.0.0.1 --port 9292 config.ru
+
+# システムRubyを使う場合（こちらでも可）
+Environment=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin
+ExecStart=/usr/bin/bundle _2.5.17_ exec rackup --host 127.0.0.1 --port 9292 config.ru
 Restart=on-failure
 RestartSec=5
 
@@ -150,7 +185,7 @@ sudo systemctl enable --now seqserv
 curl -sS http://127.0.0.1:9292/seqserv/ | head
 ```
 
-注: `/usr/bin/bundle` のパスは `which bundle` で実際のパスを確認し、必要に応じて差し替えてください。
+注: `/usr/bin/bundle` のパスは `which bundle` で実際のパスを確認し、必要に応じて差し替えてください。BLAST+をNCBIのtarから配置した場合は、`:bin:` を `/usr/local/bin` に設定しておくと検出が安定します。
 
 ---
 
@@ -173,6 +208,12 @@ sudo firewall-cmd --reload
 ---
 
 ## 6) Apache リバースプロキシ設定（/seqserv）
+
+モジュール確認（httpd 同梱の `proxy_module` / `proxy_http_module` が読み込み済みか確認）:
+
+```
+sudo httpd -M | grep -E 'proxy(_http)?_module'
+```
 
 設定ファイル `/etc/httpd/conf.d/seqserv.conf` を作成:
 
@@ -226,6 +267,7 @@ API:
 - 権限/パス:
   - `/data2/sequenceserver/db3` が `apache` ユーザで読み書き可能か確認。
   - `~apache/.sequenceserver.conf`（= `/usr/share/httpd/.sequenceserver.conf`）の `:database_dir:` が `/data2/sequenceserver/db3` になっているか確認。
+  - 初回にDBが1つも無いと `NO_BLAST_DATABASE_FOUND` で起動失敗。先に `makeblastdb` で1つ作成する。
 
 - bundler のパスが異なる:
   - `which bundle` でパスを確認し、systemd の ExecStart を調整。
