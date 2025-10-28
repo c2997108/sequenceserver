@@ -17,6 +17,16 @@ If you use SequenceServer, please cite our paper:
 
 ## Installation
 
+手っ取り早いセットアップ@Rocky Linux 9
+
+```
+git clone https://github.com/c2997108/sequenceserver
+cd sequenceserver
+bash ./scripts/setup_sequenceserver_local.sh
+cp spec/sequences/Nucleotide_TP53_COX41.fasta data/blastdb/
+bin/seqserv-wrapper --host 0.0.0.0 --port 4567
+```
+
 For installation instructions and how to use SequenceServer please see
 https://sequenceserver.com/ - instructions for independently installing open-source sequenceserver are linked from the footer. 
 
