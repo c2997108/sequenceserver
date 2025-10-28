@@ -1,0 +1,17 @@
+[Unit]
+Description=SequenceServer BLAST web UI
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=seqserv
+Group=seqserv
+WorkingDirectory=/data/yoshitake.kazutoshi/work/seqserv/sequenceserver
+Environment=SEQSERVER_DB_DIR=/data/yoshitake.kazutoshi/work/seqserv/sequenceserver/data/blastdb
+ExecStart=/data/yoshitake.kazutoshi/work/seqserv/sequenceserver/bin/seqserv-wrapper --host 0.0.0.0 --port 4567
+Restart=on-failure
+RestartSec=5s
+
+[Install]
+WantedBy=multi-user.target
