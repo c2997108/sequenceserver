@@ -24,7 +24,7 @@ git clone https://github.com/c2997108/sequenceserver
 cd sequenceserver
 bash ./scripts/setup_sequenceserver_local.sh
 cp spec/sequences/Nucleotide_TP53_COX41.fasta data/blastdb/
-bin/seqserv-wrapper --host 0.0.0.0 --port 4567
+bin/seqserv-wrapper --host 0.0.0.0 --port 4567 --path-prefix /seqserv
 ```
 
 For installation instructions and how to use SequenceServer please see
