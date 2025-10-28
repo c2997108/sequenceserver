@@ -7,9 +7,9 @@ Wants=network-online.target
 Type=simple
 User=seqserv
 Group=seqserv
-WorkingDirectory=/data/yoshitake.kazutoshi/work/seqserv/sequenceserver
-Environment=SEQSERVER_DB_DIR=/data/yoshitake.kazutoshi/work/seqserv/sequenceserver/data/blastdb
-ExecStart=/data/yoshitake.kazutoshi/work/seqserv/sequenceserver/bin/seqserv-wrapper --host 0.0.0.0 --port 4567
+WorkingDirectory=/home/yoshitake.kazutoshi/work/seqserv2/sequenceserver
+Environment=SEQSERVER_DB_DIR=/home/yoshitake.kazutoshi/work/seqserv2/sequenceserver/data/blastdb
+ExecStart=/home/yoshitake.kazutoshi/work/seqserv2/sequenceserver/bin/seqserv-wrapper --host 0.0.0.0 --port 4567
 Restart=on-failure
 RestartSec=5s
 

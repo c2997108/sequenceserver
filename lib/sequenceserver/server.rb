@@ -22,7 +22,19 @@ module SequenceServer
     def start
       setup_signal_handlers
       @server = WEBrick::HTTPServer.new(options)
-      @server.mount '/', Rackup::Handler::WEBrick, app
+      mount_path = app.config[:root_path_prefix].to_s
+      mount_path = '' if mount_path == '/'
+      mount_path = '/' if mount_path.empty?
+
+      @server.mount mount_path, Rackup::Handler::WEBrick, app
+
+      if mount_path != '/'
+        redirect_target = mount_path.end_with?('/') ? mount_path : "#{mount_path}/"
+        @server.mount_proc '/' do |_req, res|
+          res.status = 302
+          res['Location'] = redirect_target
+        end
+      end
       @server.start
     end
 

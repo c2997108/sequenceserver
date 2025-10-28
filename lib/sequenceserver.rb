@@ -74,6 +74,18 @@ module SequenceServer
       # Initialise global configuration object from the above config hash.
       @config = Config.new(config)
 
+      prefix_from_config = normalize_root_path_prefix(@config[:root_path_prefix])
+      existing_prefix = begin
+        normalize_root_path_prefix(Routes.settings.root_path_prefix)
+      rescue StandardError
+        ''
+      end
+      effective_prefix = prefix_from_config
+      effective_prefix = existing_prefix if effective_prefix.empty? && !existing_prefix.empty?
+
+      @config[:root_path_prefix] = effective_prefix
+      Routes.set :root_path_prefix, @config[:root_path_prefix]
+
       # When in development mode, cause SequenceServer to terminate if any
       # thread spawned by the main process raises an unhandled exception. In
       # production mode the expectation is to log at appropriate severity level
@@ -138,11 +150,14 @@ module SequenceServer
     def on_start
       puts '** SequenceServer is ready.'
       puts "   Go to #{server_url} in your browser and start BLASTing!"
+      path_hint = config[:root_path_prefix].to_s
+      path_hint = '' if path_hint.empty? || path_hint == '/'
+      path_hint = "#{path_hint}/" unless path_hint.empty?
       if ip_address
         puts '   To share your setup, try one of the following addresses. These'
         puts '   may only work within your home, office, or university network.'
-        puts "     -  http://#{ip_address}:#{config[:port]}"
-        puts "     -  http://#{hostname}:#{config[:port]}" if hostname
+        puts "     -  http://#{ip_address}:#{config[:port]}#{path_hint}"
+        puts "     -  http://#{hostname}:#{config[:port]}#{path_hint}" if hostname
         puts '   To share your setup with anyone in the world, ask your IT team'
         puts '   for a public IP address or consider the SequenceServer cloud'
         puts '   hosting service: https://sequenceserver.com/cloud'
@@ -180,6 +195,14 @@ module SequenceServer
     end
 
     private
+
+    def normalize_root_path_prefix(prefix)
+      value = prefix.to_s.strip
+      return '' if value.empty? || value == '/'
+      value = "/#{value}" unless value.start_with?('/')
+      value.chomp!('/')
+      value
+    end
 
     def init_binaries
       if config[:bin]
@@ -265,7 +288,11 @@ module SequenceServer
     def server_url
       host = config[:host]
       host = 'localhost' if ['127.0.0.1', '0.0.0.0'].include?(host)
-      "http://#{host}:#{config[:port]}"
+      base = "http://#{host}:#{config[:port]}"
+      prefix = config[:root_path_prefix].to_s
+      prefix = '' if prefix.empty? || prefix == '/'
+      prefix = "#{prefix}/" unless prefix.empty?
+      "#{base}#{prefix}"
     end
 
     # Returns a local ip adress.

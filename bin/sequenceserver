@@ -119,6 +119,10 @@ begin
        'Port to run SequenceServer on',
        argument: true
 
+    on 'P', 'path-prefix=',
+       'Serve SequenceServer under this URL prefix (e.g. /seqserv)',
+       argument: true
+
     on 'o', 'optimistic=',
        'Optimistic mode does not perform database compatibility checks, which can be faster. ' \
        'Only use this if you format FASTAs with "sequenceserver -make-blast-databases"',
@@ -158,6 +162,7 @@ begin
     clean_opts = lambda do |hash|
       hash.delete_if { |k, v| k == :set || v.nil? }
       hash[:config_file] ||= hash.delete(:config)
+      hash[:root_path_prefix] ||= hash.delete(:path_prefix) || hash.delete(:'path-prefix')
       hash
     end
 
