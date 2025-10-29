@@ -5,8 +5,8 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-User=seqserv
-Group=seqserv
+User=root
+Group=root
 WorkingDirectory=/home/yoshitake.kazutoshi/work/seqserv2/sequenceserver
 Environment=SEQSERVER_DB_DIR=/home/yoshitake.kazutoshi/work/seqserv2/sequenceserver/data/blastdb
 ExecStart=/home/yoshitake.kazutoshi/work/seqserv2/sequenceserver/bin/seqserv-wrapper --host 0.0.0.0 --port 4567
