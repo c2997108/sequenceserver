@@ -7,7 +7,22 @@ If you use SequenceServer, please cite our paper:
 
 ## Installation
 
-手っ取り早いセットアップ@Rocky Linux 9
+セットアップ@WSL Ubuntu
+
+```
+apt install build-essential
+wget https://ftp.ncbi.nlm.nih.gov/blast/executables/blast+/2.16.0/ncbi-blast-2.16.0+-x64-linux.tar.gz
+tar vxf ncbi-blast-2.16.0+-x64-linux.tar.gz
+
+git clone https://github.com/c2997108/sequenceserver
+cd sequenceserver
+bash ./scripts/setup_sequenceserver_local.sh
+cp spec/sequences/Nucleotide_TP53_COX41.fasta data/blastdb/
+bin/seqserv-wrapper --host 0.0.0.0 --port 4567 --path-prefix /seqserv
+#初回起動時に、blastの展開場所(例：/home/user/ncbi-blast-2.16.0+ )の指定と、DBの初期化を行う(初期化は全部Enterを押せばOK）。
+```
+
+セットアップ@Rocky Linux 9
 
 ```
 git clone https://github.com/c2997108/sequenceserver
