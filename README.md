@@ -34,7 +34,7 @@ bin/seqserv-wrapper --host 0.0.0.0 --port 4567 --path-prefix /seqserv
 #サーバ起動時に自動実行するようにするには
 #いったんroot（もしくは実際に実行させるユーザ）で実行しておく。blastへのパスなどはユーザごとに~/.sequenceserver.confに保存しているため。
 sudo bin/seqserv-wrapper --host 0.0.0.0 --port 4567 --path-prefix /seqserv
-#seqserv.serviceファイルで、ユーザ名、グループ名を編集しておく
+#seqserv.serviceファイルで、User=, Group= を編集しておく。ExecStart=で --path-prefix /seqservを追加しておく。
 #bin/seqserv-wrapperファイルで、8行目にblastnへのパスを追加しておく　例：export PATH="${APP_ROOT}/vendor/ruby-3.0.7-withssl/bin:/suikou/tool9-all/bin:${PATH}"
 
 sudo cp -i seqserv.service /usr/lib/systemd/system/
